@@ -1,3 +1,7 @@
+# Build:
+# docker build -t gr4 .
+# docker run -u 1000:1000 -v /data/sources/fair/:/fair/ -it gr4
+
 FROM ubuntu:24.04
 LABEL authors="akrimm"
 
@@ -77,5 +81,11 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+#-----------------------
+# Personal
+ENV DISPLAY=:0
+
+#-----------------------
+
 USER user
-ENTRYPOINT ["/bin/bash", "-l", "-c"]
+WORKDIR /fair
