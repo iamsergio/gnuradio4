@@ -58,3 +58,8 @@ emscripten-toolchain.ini
 node_modules/
 package.json
 package-lock.json
+_deps
+build-dev
+build-dev-clang
+build-dev-asan
+build-dev-clang-asan
