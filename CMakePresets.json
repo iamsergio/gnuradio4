@@ -7,7 +7,6 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-${presetName}",
       "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_COLOR_DIAGNOSTICS": "ON",
         "DISABLE_EXTERNAL_DEPS_WARNINGS": "ON",
         "WARNINGS_AS_ERRORS": "OFF"
@@ -18,6 +17,10 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "environment": {
+        "CXX": "g++-14",
+        "CC": "gcc-14"
       }
     },
     {
@@ -30,17 +33,42 @@
     {
       "name": "dev-asan",
       "inherits": "dev",
-      "description": "dev-asan",
       "cacheVariables": {
-        "ENABLE_ASAN": "ON"
+        "ENABLE_ASAN": "ON",
+        "ADDRESS_SANITIZER": "ON"
+      }
+    },
+    {
+      "name": "dev-ubsan",
+      "inherits": "dev",
+      "cacheVariables": {
+        "ENABLE_ASAN": "ON",
+        "UB_SANITIZER": "ON"
       }
     },
     {
       "name": "dev-clang",
       "inherits": "dev",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
       "environment": {
         "CXX": "clang++",
         "CC": "clang"
+      }
+    },
+    {
+      "name": "dev-clang-asan",
+      "inherits": "dev-clang",
+      "cacheVariables": {
+        "ADDRESS_SANITIZER": "ON"
+      }
+    },
+    {
+      "name": "dev-clang-ubsan",
+      "inherits": "dev-clang",
+      "cacheVariables": {
+        "UB_SANITIZER": "ON"
       }
     }
   ]
