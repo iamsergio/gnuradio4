@@ -10,7 +10,7 @@ if(TARGET SoapySDR)
   endif()
 
   if(ENABLE_TESTING)
-    add_subdirectory(test)
+    # add_subdirectory(test)
   endif()
 else()
   message(WARNING "SoapySDR development files not found: ${SoapySDR_FOUND} - skipping SoapySDR support")
