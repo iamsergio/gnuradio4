@@ -63,3 +63,4 @@ build-dev
 build-dev-clang
 build-dev-asan
 build-dev-clang-asan
+build-dev-clang-tsan
