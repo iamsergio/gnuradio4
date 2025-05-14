@@ -70,6 +70,13 @@
       "cacheVariables": {
         "UB_SANITIZER": "ON"
       }
+    },
+    {
+      "name": "dev-clang-tsan",
+      "inherits": "dev-clang",
+      "cacheVariables": {
+        "THREAD_SANITIZER": "ON"
+      }
     }
   ]
 }
