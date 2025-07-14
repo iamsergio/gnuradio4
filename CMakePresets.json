@@ -58,6 +58,13 @@
       }
     },
     {
+      "name": "dev-clang-rel",
+      "inherits": "dev-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
       "name": "dev-clang-asan",
       "inherits": "dev-clang",
       "cacheVariables": {
