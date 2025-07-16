@@ -3,6 +3,8 @@ LABEL authors="akrimm"
 
 # test locally via: docker build -f Dockerfile -t test-image:ubuntu25 .
 
+# docker run -it -v /data/sources/fair/gnuradio4:/gr4 bash
+
 ARG SONAR_SCANNER_HOME=/opt/sonar-scanner
 ARG SONAR_SCANNER_VERSION=5.0.1.3006
 ARG NODE_MAJOR=18
@@ -27,8 +29,7 @@ ENV JAVA_HOME=/opt/java/openjdk \
 RUN apt-get update -y \
     && apt-get install --no-install-recommends -qqy wget gpg ca-certificates software-properties-common bash file locales python3-pip npm sudo cmake git make ninja-build clang-18 clang-tools-18 clang-20 clang-tools-20 libc++-20-dev libc++abi-20-dev gdb lldb-20 gcc-14 g++-14 gcc-15 g++-15 ccache mold \
     && locale-gen en_US.UTF-8 && echo 'LANG="en_US.UTF-8"'>/etc/default/locale \
-    && useradd -m -g users user \
-    && echo user ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/user && chmod 0440 /etc/sudoers.d/user \
+    && echo ubuntu ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/ubuntu && chmod 0440 /etc/sudoers.d/ubuntu \
     && dpkg-reconfigure --frontend=noninteractive locales && update-locale LANG=en_US.UTF-8 \
     && update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-18 110 \
     && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 110 --slave /usr/bin/g++ g++ /usr/bin/g++-14 --slave /usr/bin/gcov gcov /usr/bin/gcov-14 \
@@ -79,5 +80,4 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-USER user
-ENTRYPOINT ["/bin/bash", "-l", "-c"]
+USER ubuntu
