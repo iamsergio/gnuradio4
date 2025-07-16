@@ -93,7 +93,7 @@ jobs:
 
       - name: Configure ccache
         run: |
-          ccache --max-size=3G
+          ccache --max-size=10G
           ccache --show-stats
 
       - name: Cache fetchContent
@@ -120,8 +120,7 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          test -f $EMSDK_HOME/emsdk_env.sh && source $EMSDK_HOME/emsdk_env.sh
-          cmake --build ../build
+          cmake --build ../build --verbose --target qa_SchedulerMessages qa_Messages
 
       - name: execute tests
         if: matrix.compiler.cc != 'gcc-14' || matrix.cmake-build-type != 'Debug'
@@ -129,7 +128,7 @@ jobs:
           DISABLE_SENSITIVE_TESTS: 1 # disables tests which are sensitive to execution speed and will not run with instrumented code
         working-directory: ${{runner.workspace}}/build
         shell: bash
-        run: ctest --output-on-failure
+        run: ctest --output-on-failure --verbose -R "qa_SchedulerMessages|qa_Messages"
 
       - name: Show final ccache stats
         run: ccache --show-stats
