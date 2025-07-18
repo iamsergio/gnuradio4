@@ -818,6 +818,7 @@ const boost::ut::suite MessagesTests = [] {
         expect(eq(receivedStates, std::vector{name(lifecycle::State::INITIALISED), name(lifecycle::State::RUNNING), name(lifecycle::State::REQUESTED_STOP), name(lifecycle::State::STOPPED)}));
 
         schedulerThread.join();
+        std::println("joined!");
     } | schedulingPolicies;
 
     // "Settings handling via scheduler"_test = []<typename SchedulerPolicy> {
