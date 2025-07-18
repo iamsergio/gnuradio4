@@ -23,11 +23,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        with:
-          detached: true
-
       - name: Check if dockerfile was modified
         id: changes
         uses: dorny/paths-filter@v3
@@ -127,6 +122,11 @@ jobs:
         shell: bash
         run: |
           cmake --build ../build --verbose --target qa_Messages
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
 
       - name: execute tests
         if: matrix.compiler.cc != 'gcc-14' || matrix.cmake-build-type != 'Debug'
