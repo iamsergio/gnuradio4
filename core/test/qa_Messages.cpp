@@ -584,7 +584,6 @@ const boost::ut::suite MessagesTests = [] {
         expect(eq(heartbeat1.endpoint, std::string(block::property::kHeartbeat)));
         expect(heartbeat1.data.has_value());
         expect(heartbeat1.data.value().contains("heartbeat"));
-        std::println("FOO end block2");
     };
 
     constexpr auto schedulingPolicies = std::tuple<std::integral_constant<scheduler::ExecutionPolicy, scheduler::ExecutionPolicy::singleThreaded>, std::integral_constant<scheduler::ExecutionPolicy, scheduler::ExecutionPolicy::singleThreadedBlocking>, std::integral_constant<scheduler::ExecutionPolicy, scheduler::ExecutionPolicy::multiThreaded>>{};
@@ -766,7 +765,6 @@ const boost::ut::suite MessagesTests = [] {
         }
 
         std::println("##### finished test for scheduler {} - produced {} samples", gr::meta::type_name<decltype(scheduler)>(), sink._nSamplesProduced);
-        std::println("FOO end block3");
     } | schedulingPolicies;
 
     "Subscribe to scheduler lifecycle messages"_test = []<typename SchedulerPolicy> {
@@ -819,7 +817,6 @@ const boost::ut::suite MessagesTests = [] {
         expect(eq(receivedStates, std::vector{name(lifecycle::State::INITIALISED), name(lifecycle::State::RUNNING), name(lifecycle::State::REQUESTED_STOP), name(lifecycle::State::STOPPED)}));
 
         schedulerThread.join();
-        std::println("FOO end block4");
     } | schedulingPolicies;
 
     "Settings handling via scheduler"_test = []<typename SchedulerPolicy> {
@@ -882,7 +879,6 @@ const boost::ut::suite MessagesTests = [] {
             std::this_thread::sleep_for(10ms);
         }
         schedulerThread.join();
-        std::println("FOO end block5");
     } | schedulingPolicies;
 };
 
