@@ -100,10 +100,8 @@ const boost::ut::suite MessagesTests = [] {
         using namespace gr::testing;
         using enum gr::message::Command;
         
-        std::println("FOO start1");
 
         "Block<T>-level heartbeat tests"_test = [] {
-            std::println("FOO start2");
             gr::MsgPortOut toBlock;
             TestBlock<int> unitTestBlock(property_map{{"name", "UnitTestBlock"}});
             gr::MsgPortIn  fromBlock;
@@ -169,7 +167,6 @@ const boost::ut::suite MessagesTests = [] {
                 expect(nothrow([&] { unitTestBlock.processScheduledMessages(); })) << "manually execute processing of messages";
                 expect(eq(fromBlock.streamReader().available(), 0UZ)) << "should not receive heartbeat";
             };
-            std::println("FOO end2");
         };
 
         "Block<T>-level echo tests"_test = [] {
@@ -248,7 +245,6 @@ const boost::ut::suite MessagesTests = [] {
                 expect(eq(reply.endpoint, std::string(block::property::kEcho)));
                 expect(!reply.data.has_value());
             };
-            std::println("FOO end3");
         };
 
         "Block<T>-level lifecycle::State tests"_test = [] {
@@ -305,7 +301,6 @@ const boost::ut::suite MessagesTests = [] {
                 expect(fromBlock.streamReader().get(1UZ).consume(1UZ));
                 expect(unitTestBlock.state() == lifecycle::State::INITIALISED);
             };
-            std::println("FOO end4");
         };
 
         "Block<T>-level (staged) settings tests"_test = [] {
@@ -363,7 +358,6 @@ const boost::ut::suite MessagesTests = [] {
                 expect(stagedSettings.contains("factor"));
                 expect(eq(43, std::get<int>(stagedSettings.at("factor"))));
             };
-            std::println("FOO end5");
         };
 
         "Block<T>-level active context tests"_test = [] {
@@ -542,9 +536,7 @@ const boost::ut::suite MessagesTests = [] {
                 expect(reply.data.value().contains(gr::tag::CONTEXT.shortKey()));
                 expect(eq(""s, std::get<std::string>(reply.data.value().at(gr::tag::CONTEXT.shortKey()))));
             };
-            std::println("FOO end6");
         };
-        std::println("FOO end1");
     };
 
     "Multi-Block<T> message passing tests"_test = [] {
