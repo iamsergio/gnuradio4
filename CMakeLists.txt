@@ -39,6 +39,33 @@ if(NOT CMAKE_CXX_COMPILER_ID MATCHES ".*Clang" AND (NOT CMAKE_CXX_COMPILER_ID ST
     set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -s")
   endif()
 
+  # clang-scan-deps in required by ccache
+  if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+    string(
+      REGEX MATCH
+            "^[0-9]+"
+            CLANG_MAJOR
+            "${CMAKE_CXX_COMPILER_VERSION}")
+    find_program(CLANG_SCAN_DEPS_EXEC NAMES clang-scan-deps-${CLANG_MAJOR} clang-scan-deps)
+    if(CLANG_SCAN_DEPS_EXEC)
+      set(CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS
+          "${CLANG_SCAN_DEPS_EXEC}"
+          CACHE FILEPATH "" FORCE)
+    else()
+      message(WARNING "clang‑scan‑deps not found; module scanning will be disabled")
+      set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+    endif()
+  endif()
+  
+  # Use ccache if found and enabled
+  find_program(CCACHE_PROGRAM ccache)
+  if(CCACHE_PROGRAM AND USE_CCACHE)
+    message(STATUS "ccache found and will be used")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+  else()
+    message(STATUS "ccache will not be used")
+  endif()
+  
   set(_LD_GC_SECTIONS "-Wl,--gc-sections -ffunction-sections -fdata-sections")
 
   find_program(MOLD_BIN ld.mold)
@@ -174,33 +201,6 @@ message(
     "Is block registry enabled? (faster compile-times and when runtime or Python wrapping APIs are not required) ${GR_ENABLE_BLOCK_REGISTRY}"
 )
 message(STATUS "Is plugin system enabled? ${INTERNAL_ENABLE_BLOCK_PLUGINS}")
-
-# clang-scan-deps in required by ccache
-if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-  string(
-    REGEX MATCH
-          "^[0-9]+"
-          CLANG_MAJOR
-          "${CMAKE_CXX_COMPILER_VERSION}")
-  find_program(CLANG_SCAN_DEPS_EXEC NAMES clang-scan-deps-${CLANG_MAJOR} clang-scan-deps)
-  if(CLANG_SCAN_DEPS_EXEC)
-    set(CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS
-        "${CLANG_SCAN_DEPS_EXEC}"
-        CACHE FILEPATH "" FORCE)
-  else()
-    message(WARNING "clang‑scan‑deps not found; module scanning will be disabled")
-    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-  endif()
-endif()
-
-# Use ccache if found and enabled
-find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM AND USE_CCACHE)
-  message(STATUS "ccache found and will be used")
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
-else()
-  message(STATUS "ccache will not be used")
-endif()
 
 # Prefer forced colored compiler output if there's a chance we'd otherwise get none at all. Ninja and ccache "consume"
 # the compiler output, breaking the terminal detection of compilers. ccache tries to solve the problem, but can only do
