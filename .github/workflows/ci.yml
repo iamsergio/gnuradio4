@@ -77,7 +77,7 @@ jobs:
           - cc: clang-18
             cxx: clang++-18
             cmake_flags: "-DADDRESS_SANITIZER=ON -DCMAKE_LINKER=/usr/bin/clang-18"
-        cmake-build-type: [Release]
+        cmake-build-type: [RelWithDebInfo]
 
     steps:
       - uses: actions/checkout@v4
