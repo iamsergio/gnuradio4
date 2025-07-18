@@ -99,8 +99,11 @@ const boost::ut::suite MessagesTests = [] {
     "Block<T>-level message tests"_test = [] {
         using namespace gr::testing;
         using enum gr::message::Command;
+        
+        std::println("FOO start1");
 
         "Block<T>-level heartbeat tests"_test = [] {
+            std::println("FOO start2");
             gr::MsgPortOut toBlock;
             TestBlock<int> unitTestBlock(property_map{{"name", "UnitTestBlock"}});
             gr::MsgPortIn  fromBlock;
@@ -166,6 +169,7 @@ const boost::ut::suite MessagesTests = [] {
                 expect(nothrow([&] { unitTestBlock.processScheduledMessages(); })) << "manually execute processing of messages";
                 expect(eq(fromBlock.streamReader().available(), 0UZ)) << "should not receive heartbeat";
             };
+            std::println("FOO end2");
         };
 
         "Block<T>-level echo tests"_test = [] {
@@ -244,6 +248,7 @@ const boost::ut::suite MessagesTests = [] {
                 expect(eq(reply.endpoint, std::string(block::property::kEcho)));
                 expect(!reply.data.has_value());
             };
+            std::println("FOO end3");
         };
 
         "Block<T>-level lifecycle::State tests"_test = [] {
@@ -300,6 +305,7 @@ const boost::ut::suite MessagesTests = [] {
                 expect(fromBlock.streamReader().get(1UZ).consume(1UZ));
                 expect(unitTestBlock.state() == lifecycle::State::INITIALISED);
             };
+            std::println("FOO end4");
         };
 
         "Block<T>-level (staged) settings tests"_test = [] {
@@ -357,6 +363,7 @@ const boost::ut::suite MessagesTests = [] {
                 expect(stagedSettings.contains("factor"));
                 expect(eq(43, std::get<int>(stagedSettings.at("factor"))));
             };
+            std::println("FOO end5");
         };
 
         "Block<T>-level active context tests"_test = [] {
@@ -535,7 +542,9 @@ const boost::ut::suite MessagesTests = [] {
                 expect(reply.data.value().contains(gr::tag::CONTEXT.shortKey()));
                 expect(eq(""s, std::get<std::string>(reply.data.value().at(gr::tag::CONTEXT.shortKey()))));
             };
+            std::println("FOO end6");
         };
+        std::println("FOO end1");
     };
 
     "Multi-Block<T> message passing tests"_test = [] {
@@ -583,6 +592,7 @@ const boost::ut::suite MessagesTests = [] {
         expect(eq(heartbeat1.endpoint, std::string(block::property::kHeartbeat)));
         expect(heartbeat1.data.has_value());
         expect(heartbeat1.data.value().contains("heartbeat"));
+        std::println("FOO end block2");
     };
 
     constexpr auto schedulingPolicies = std::tuple<std::integral_constant<scheduler::ExecutionPolicy, scheduler::ExecutionPolicy::singleThreaded>, std::integral_constant<scheduler::ExecutionPolicy, scheduler::ExecutionPolicy::singleThreadedBlocking>, std::integral_constant<scheduler::ExecutionPolicy, scheduler::ExecutionPolicy::multiThreaded>>{};
@@ -764,6 +774,7 @@ const boost::ut::suite MessagesTests = [] {
         }
 
         std::println("##### finished test for scheduler {} - produced {} samples", gr::meta::type_name<decltype(scheduler)>(), sink._nSamplesProduced);
+        std::println("FOO end block3");
     } | schedulingPolicies;
 
     "Subscribe to scheduler lifecycle messages"_test = []<typename SchedulerPolicy> {
@@ -816,6 +827,7 @@ const boost::ut::suite MessagesTests = [] {
         expect(eq(receivedStates, std::vector{name(lifecycle::State::INITIALISED), name(lifecycle::State::RUNNING), name(lifecycle::State::REQUESTED_STOP), name(lifecycle::State::STOPPED)}));
 
         schedulerThread.join();
+        std::println("FOO end block4");
     } | schedulingPolicies;
 
     "Settings handling via scheduler"_test = []<typename SchedulerPolicy> {
@@ -878,6 +890,7 @@ const boost::ut::suite MessagesTests = [] {
             std::this_thread::sleep_for(10ms);
         }
         schedulerThread.join();
+        std::println("FOO end block5");
     } | schedulingPolicies;
 };
 
