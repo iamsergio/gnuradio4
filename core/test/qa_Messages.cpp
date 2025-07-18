@@ -768,119 +768,119 @@ const boost::ut::suite MessagesTests = [] {
     // } | schedulingPolicies;
 
     // bottom 2 passed commented out
-    // "Subscribe to scheduler lifecycle messages"_test = []<typename SchedulerPolicy> {
-    //     using namespace gr::testing;
-
-    //     gr::Graph flow;
-
-    //     auto& source  = flow.emplaceBlock<TagSource<float, ProcessFunction::USE_PROCESS_ONE>>({{"name", "TestSource"}, {"n_samples_max", gr::Size_t(100)}});
-    //     auto& process = flow.emplaceBlock<TestBlock<float>>({{"name", "UnitTestBlock"}});
-    //     auto& sink    = flow.emplaceBlock<TagSink<float, ProcessFunction::USE_PROCESS_ONE>>({{"name", "TestSink"}, {"log_samples", false}});
-
-    //     expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(source).to<"in">(process)));
-    //     expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(process).to<"in">(sink)));
-
-    //     gr::MsgPortIn  fromScheduler;
-    //     gr::MsgPortOut toScheduler;
-    //     auto           scheduler = scheduler::Simple<SchedulerPolicy::value>(std::move(flow));
-    //     expect(eq(ConnectionResult::SUCCESS, scheduler.msgOut.connect(fromScheduler)));
-    //     expect(eq(ConnectionResult::SUCCESS, toScheduler.connect(scheduler.msgIn)));
-    //     sendMessage<Command::Subscribe>(toScheduler, scheduler.unique_name, block::property::kLifeCycleState, {}, "TestClient#42");
-
-    //     auto schedulerThread = std::thread([&scheduler] {
-    //         gr::thread_pool::thread::setThreadName("qa_Messages::scheduler");
-    //         scheduler.runAndWait();
-    //     });
-
-    //     std::vector<std::string> receivedStates;
-
-    //     bool seenStopped = false;
-    //     auto lastSeen    = std::chrono::steady_clock::now();
-    //     while (!seenStopped && std::chrono::steady_clock::now() - lastSeen < 1s) {
-    //         if (fromScheduler.streamReader().available() == 0) {
-    //             std::this_thread::sleep_for(10ms);
-    //             continue;
-    //         }
-    //         const Message msg = returnReplyMsg(fromScheduler);
-    //         expect(msg.cmd == Command::Notify);
-    //         expect(msg.endpoint == block::property::kLifeCycleState);
-    //         expect(msg.data.has_value());
-    //         expect(msg.data.value().contains("state"));
-    //         const auto state = std::get<std::string>(msg.data.value().at("state"));
-    //         receivedStates.push_back(state);
-    //         lastSeen = std::chrono::steady_clock::now();
-    //         if (state == magic_enum::enum_name(lifecycle::State::STOPPED)) {
-    //             seenStopped = true;
-    //         }
-    //     }
-
-    //     auto name = [](lifecycle::State s) { return std::string(magic_enum::enum_name(s)); };
-    //     expect(eq(receivedStates, std::vector{name(lifecycle::State::INITIALISED), name(lifecycle::State::RUNNING), name(lifecycle::State::REQUESTED_STOP), name(lifecycle::State::STOPPED)}));
-
-    //     schedulerThread.join();
-    // } | schedulingPolicies;
-
-    "Settings handling via scheduler"_test = []<typename SchedulerPolicy> {
-        // ensure settings can be modified and setting change updates can be subscribed to when connected via the scheduler
-        using namespace gr::basic;
+    "Subscribe to scheduler lifecycle messages"_test = []<typename SchedulerPolicy> {
         using namespace gr::testing;
 
         gr::Graph flow;
 
-        auto& source    = flow.emplaceBlock<ClockSource<float>>({{"n_samples_max", gr::Size_t(0)}});
-        auto& testBlock = flow.emplaceBlock<TestBlock<float>>({{"factor", 42.f}});
-        auto& sink      = flow.emplaceBlock<TagSink<float, ProcessFunction::USE_PROCESS_ONE>>({{"log_samples", false}});
+        auto& source  = flow.emplaceBlock<TagSource<float, ProcessFunction::USE_PROCESS_ONE>>({{"name", "TestSource"}, {"n_samples_max", gr::Size_t(100)}});
+        auto& process = flow.emplaceBlock<TestBlock<float>>({{"name", "UnitTestBlock"}});
+        auto& sink    = flow.emplaceBlock<TagSink<float, ProcessFunction::USE_PROCESS_ONE>>({{"name", "TestSink"}, {"log_samples", false}});
 
-        expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(source).to<"in">(testBlock)));
-        expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(testBlock).to<"in">(sink)));
-
-        auto scheduler = scheduler::Simple<SchedulerPolicy::value>(std::move(flow));
+        expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(source).to<"in">(process)));
+        expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(process).to<"in">(sink)));
 
         gr::MsgPortIn  fromScheduler;
         gr::MsgPortOut toScheduler;
+        auto           scheduler = scheduler::Simple<SchedulerPolicy::value>(std::move(flow));
         expect(eq(ConnectionResult::SUCCESS, scheduler.msgOut.connect(fromScheduler)));
         expect(eq(ConnectionResult::SUCCESS, toScheduler.connect(scheduler.msgIn)));
-        sendMessage<Command::Subscribe>(toScheduler, "", block::property::kStagedSetting, {}, "TestClient");
-
-        auto client = std::thread([&fromScheduler, &toScheduler, blockName = testBlock.unique_name, schedulerName = scheduler.unique_name] {
-            gr::thread_pool::thread::setThreadName("qa_Mess::Client");
-            sendMessage<Command::Set>(toScheduler, blockName, block::property::kStagedSetting, {{"factor", 43.0f}});
-            bool       seenUpdate = false;
-            const auto startTime  = std::chrono::steady_clock::now();
-            auto       isExpired  = [&startTime] { return std::chrono::steady_clock::now() - startTime > 3s; };
-            bool       expired    = false;
-            while (!seenUpdate && !expired) {
-                expired = isExpired();
-                while (fromScheduler.streamReader().available() == 0 && !expired) {
-                    expired = isExpired();
-                    std::this_thread::sleep_for(10ms);
-                }
-                if (!expired) {
-                    const auto msg = returnReplyMsg(fromScheduler);
-                    if (msg.serviceName == blockName && msg.endpoint == block::property::kStagedSetting) {
-                        expect(msg.data.has_value());
-                        expect(msg.data.value().contains("factor"));
-                        const auto factor = std::get<float>(msg.data.value().at("factor"));
-                        expect(eq(factor, 43.0f));
-                        seenUpdate = true;
-                    }
-                }
-            }
-            expect(seenUpdate);
-            sendMessage<Command::Set>(toScheduler, schedulerName, block::property::kLifeCycleState, {{"state", std::string(magic_enum::enum_name(lifecycle::State::REQUESTED_STOP))}});
-        });
+        sendMessage<Command::Subscribe>(toScheduler, scheduler.unique_name, block::property::kLifeCycleState, {}, "TestClient#42");
 
         auto schedulerThread = std::thread([&scheduler] {
             gr::thread_pool::thread::setThreadName("qa_Messages::scheduler");
             scheduler.runAndWait();
         });
 
-        client.join();
-        while (source.state() != lifecycle::State::STOPPED) {
-            std::this_thread::sleep_for(10ms);
+        std::vector<std::string> receivedStates;
+
+        bool seenStopped = false;
+        auto lastSeen    = std::chrono::steady_clock::now();
+        while (!seenStopped && std::chrono::steady_clock::now() - lastSeen < 1s) {
+            if (fromScheduler.streamReader().available() == 0) {
+                std::this_thread::sleep_for(10ms);
+                continue;
+            }
+            const Message msg = returnReplyMsg(fromScheduler);
+            expect(msg.cmd == Command::Notify);
+            expect(msg.endpoint == block::property::kLifeCycleState);
+            expect(msg.data.has_value());
+            expect(msg.data.value().contains("state"));
+            const auto state = std::get<std::string>(msg.data.value().at("state"));
+            receivedStates.push_back(state);
+            lastSeen = std::chrono::steady_clock::now();
+            if (state == magic_enum::enum_name(lifecycle::State::STOPPED)) {
+                seenStopped = true;
+            }
         }
+
+        auto name = [](lifecycle::State s) { return std::string(magic_enum::enum_name(s)); };
+        expect(eq(receivedStates, std::vector{name(lifecycle::State::INITIALISED), name(lifecycle::State::RUNNING), name(lifecycle::State::REQUESTED_STOP), name(lifecycle::State::STOPPED)}));
+
         schedulerThread.join();
     } | schedulingPolicies;
+
+    // "Settings handling via scheduler"_test = []<typename SchedulerPolicy> {
+    //     // ensure settings can be modified and setting change updates can be subscribed to when connected via the scheduler
+    //     using namespace gr::basic;
+    //     using namespace gr::testing;
+
+    //     gr::Graph flow;
+
+    //     auto& source    = flow.emplaceBlock<ClockSource<float>>({{"n_samples_max", gr::Size_t(0)}});
+    //     auto& testBlock = flow.emplaceBlock<TestBlock<float>>({{"factor", 42.f}});
+    //     auto& sink      = flow.emplaceBlock<TagSink<float, ProcessFunction::USE_PROCESS_ONE>>({{"log_samples", false}});
+
+    //     expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(source).to<"in">(testBlock)));
+    //     expect(eq(ConnectionResult::SUCCESS, flow.connect<"out">(testBlock).to<"in">(sink)));
+
+    //     auto scheduler = scheduler::Simple<SchedulerPolicy::value>(std::move(flow));
+
+    //     gr::MsgPortIn  fromScheduler;
+    //     gr::MsgPortOut toScheduler;
+    //     expect(eq(ConnectionResult::SUCCESS, scheduler.msgOut.connect(fromScheduler)));
+    //     expect(eq(ConnectionResult::SUCCESS, toScheduler.connect(scheduler.msgIn)));
+    //     sendMessage<Command::Subscribe>(toScheduler, "", block::property::kStagedSetting, {}, "TestClient");
+
+    //     auto client = std::thread([&fromScheduler, &toScheduler, blockName = testBlock.unique_name, schedulerName = scheduler.unique_name] {
+    //         gr::thread_pool::thread::setThreadName("qa_Mess::Client");
+    //         sendMessage<Command::Set>(toScheduler, blockName, block::property::kStagedSetting, {{"factor", 43.0f}});
+    //         bool       seenUpdate = false;
+    //         const auto startTime  = std::chrono::steady_clock::now();
+    //         auto       isExpired  = [&startTime] { return std::chrono::steady_clock::now() - startTime > 3s; };
+    //         bool       expired    = false;
+    //         while (!seenUpdate && !expired) {
+    //             expired = isExpired();
+    //             while (fromScheduler.streamReader().available() == 0 && !expired) {
+    //                 expired = isExpired();
+    //                 std::this_thread::sleep_for(10ms);
+    //             }
+    //             if (!expired) {
+    //                 const auto msg = returnReplyMsg(fromScheduler);
+    //                 if (msg.serviceName == blockName && msg.endpoint == block::property::kStagedSetting) {
+    //                     expect(msg.data.has_value());
+    //                     expect(msg.data.value().contains("factor"));
+    //                     const auto factor = std::get<float>(msg.data.value().at("factor"));
+    //                     expect(eq(factor, 43.0f));
+    //                     seenUpdate = true;
+    //                 }
+    //             }
+    //         }
+    //         expect(seenUpdate);
+    //         sendMessage<Command::Set>(toScheduler, schedulerName, block::property::kLifeCycleState, {{"state", std::string(magic_enum::enum_name(lifecycle::State::REQUESTED_STOP))}});
+    //     });
+
+    //     auto schedulerThread = std::thread([&scheduler] {
+    //         gr::thread_pool::thread::setThreadName("qa_Messages::scheduler");
+    //         scheduler.runAndWait();
+    //     });
+
+    //     client.join();
+    //     while (source.state() != lifecycle::State::STOPPED) {
+    //         std::this_thread::sleep_for(10ms);
+    //     }
+    //     schedulerThread.join();
+    // } | schedulingPolicies;
 };
 
 inline Error generateError(std::string_view msg) { return Error(msg); }
