@@ -72,9 +72,9 @@ const boost::ut::suite ExportPortsTests_ = [] {
         expect(eq(ConnectionResult::SUCCESS, toScheduler.connect(scheduler.msgIn)));
         expect(eq(ConnectionResult::SUCCESS, scheduler.msgOut.connect(fromScheduler)));
 
-        sendMessage<Set>(toScheduler, subGraph->uniqueName(), graph::property::kSubgraphExportPort, //
+        testing::sendMessage<Set>(toScheduler, subGraph->uniqueName(), graph::property::kSubgraphExportPort, //
             property_map{{"uniqueBlockName"s, subGraphDirect->blockRef().pass2_unique_id}, {"portDirection"s, "output"s}, {"portName"s, "out"s}, {"exportFlag"s, true}});
-        sendMessage<Set>(toScheduler, subGraph->uniqueName(), graph::property::kSubgraphExportPort, //
+        testing::sendMessage<Set>(toScheduler, subGraph->uniqueName(), graph::property::kSubgraphExportPort, //
             property_map{{"uniqueBlockName"s, subGraphDirect->blockRef().pass1_unique_id}, {"portDirection"s, "input"s}, {"portName"s, "in"s}, {"exportFlag"s, true}});
         scheduler.processScheduledMessages();
 
@@ -103,7 +103,7 @@ const boost::ut::suite ExportPortsTests_ = [] {
 
         // Get the whole graph
         {
-            sendMessage<Set>(toScheduler, graph.unique_name /* serviceName */, graph::property::kGraphInspect /* endpoint */, property_map{} /* data */);
+            testing::sendMessage<Set>(toScheduler, graph.unique_name /* serviceName */, graph::property::kGraphInspect /* endpoint */, property_map{} /* data */);
             if (!waitForReply(fromScheduler)) {
                 expect(false) << "Reply message not received for kGraphInspect.";
             }
@@ -252,7 +252,7 @@ const boost::ut::suite SubgraphBlockSettingsTests_ = [] {
         expect(eq(graph.blocks().size(), 3UZ)) << "should contain source->(copy->copy)->sink";
 
         // Sending messages to blocks in the subgraph
-        sendMessage<Set>(toScheduler, std::string(subGraphDirect->blockRef().settingsRecorder->unique_name) /* serviceName */, block::property::kStagedSetting /* endpoint */, {{"scaling_factor", 42.0f}} /* data  */);
+        testing::sendMessage<Set>(toScheduler, std::string(subGraphDirect->blockRef().settingsRecorder->unique_name) /* serviceName */, block::property::kStagedSetting /* endpoint */, {{"scaling_factor", 42.0f}} /* data  */);
 
         // Stopping scheduler
         scheduler.requestStop();
