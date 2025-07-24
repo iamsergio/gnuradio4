@@ -19,6 +19,7 @@ using namespace gr;
 
 using namespace std::chrono_literals;
 
+/// Sleeps the current thread until condition() is true or timeout
 template<typename Condition>
 bool awaitCondition(std::chrono::milliseconds timeout, Condition condition) {
     auto start = std::chrono::steady_clock::now();
@@ -31,6 +32,7 @@ bool awaitCondition(std::chrono::milliseconds timeout, Condition condition) {
     return false;
 }
 
+/// returns and consumes the first message
 inline Message consumeReplyMsg(gr::MsgPortIn& port) {
     ReaderSpanLike auto span = port.streamReader().get<SpanReleasePolicy::ProcessAll>(1UZ);
     Message             msg  = span[0];
@@ -38,8 +40,10 @@ inline Message consumeReplyMsg(gr::MsgPortIn& port) {
     return msg;
 };
 
+/// returns number of messages available
 inline std::size_t getNReplyMessages(gr::MsgPortIn& port) { return port.streamReader().available(); };
 
+/// Returns and consumes all replies
 inline std::vector<Message> consumeAllReplyMessages(gr::MsgPortIn& port, std::source_location sourceLocation = std::source_location::current()) {
     std::vector<Message> msgs;
 
@@ -54,6 +58,10 @@ inline std::vector<Message> consumeAllReplyMessages(gr::MsgPortIn& port, std::so
     return msgs;
 };
 
+/// Waits for N replies to be available
+/// DEPRECATED: Do not use, as we shouldn't assume how many replies exist, many replies can be unrelated.
+///             There's 2 callers which can't be ported easily.
+///             Instead, look for the message you want by endpoint/data. See the other waitForReply overload().
 inline bool waitForReply(gr::MsgPortIn& fromGraph, std::size_t nReplies = 1UZ, std::chrono::milliseconds maxWaitTime = 1s) {
     auto startedAt = std::chrono::system_clock::now();
     while (fromGraph.streamReader().available() < nReplies) {
@@ -65,14 +73,18 @@ inline bool waitForReply(gr::MsgPortIn& fromGraph, std::size_t nReplies = 1UZ, s
     return fromGraph.streamReader().available() >= nReplies;
 };
 
+/// Waits for 1 reply that satisfies condition.
+/// You can pass the ReplyChecker() as the condition, to save some typing, example:
+///     ReplyChecker{.expectedEndpoint = block::property::kSetting, .expectedHasData = false}
+/// Returns the reply that satifies the condition.
 template<typename Condition>
-inline bool waitForReply(gr::MsgPortIn& fromGraph, Condition condition, std::chrono::milliseconds maxWaitTime = 1s) {
+inline std::optional<Message> waitForReply(gr::MsgPortIn& fromGraph, Condition condition, std::chrono::milliseconds maxWaitTime = 1s) {
     auto startedAt = std::chrono::system_clock::now();
     while (true) {
         auto messages = fromGraph.streamReader().get();
         auto it       = std::find_if(messages.begin(), messages.end(), condition);
         if (it != messages.end()) {
-            return true;
+            return *it;
         }
 
         std::this_thread::sleep_for(100ms);
@@ -81,30 +93,33 @@ inline bool waitForReply(gr::MsgPortIn& fromGraph, Condition condition, std::chr
             for (auto& msg : messages) {
                 std::println("msg: .endpoint={} .hasData={}", msg.endpoint, msg.data.has_value());
             }
-            return false;
+            return std::nullopt;
         }
     }
 };
 
-template<message::Command Cmd>
-inline void sendMessage(auto& toPort, std::string_view serviceName, std::string_view endpoint, property_map data, std::string_view clientRequestID = "") {
-    gr::sendMessage<Cmd>(toPort, serviceName, endpoint, std::move(data), clientRequestID);
-}
-
+/// Sends a message, waits for its reply and validates it
+///
+/// This is the preferred way to send a message in a test, as it handles steps
+/// that can be either forgotten (like waiting) or that are just verbose boiler-plate
+/// Condition can be a lamdba, such as [] (const Message &reply) { return reply.endpoint == myendpoint; }
+/// or pass a functor for convenience, like:  ReplyChecker{.expectedEndpoint = block::property::kSetting}
 template<message::Command Cmd, typename Condition>
-inline void sendAndWaitMessage(auto& toPort, auto& fromPort, std::string_view serviceName, std::string_view endpoint, //
-    property_map data, Condition condition, std::string_view clientRequestID = "") {
+inline std::optional<Message> sendAndWaitMessage(auto& toPort, auto& fromPort, std::string_view serviceName, std::string_view endpoint, //
+    property_map data, Condition condition, std::string_view clientRequestID = "", std::source_location sourceLocation = std::source_location::current()) {
     gr::sendMessage<Cmd>(toPort, serviceName, endpoint, std::move(data), clientRequestID);
-    expect(waitForReply(fromPort, condition)) << std::format("Reply message not received.");
+    auto reply = waitForReply(fromPort, condition);
+    expect(reply.has_value()) << std::format("Reply message not received. at {}\n", sourceLocation);
 
     // consume every message so they dont' leak into the next test. The next test is resilient
     // but it makes debugging harder if we have old messages
     consumeAllReplyMessages(fromPort);
     expect(eq(getNReplyMessages(fromPort), 0UZ));
+
+    return reply;
 }
 
 struct ReplyChecker {
-    // ReplyChecker(std::string_view expectedEndpoint, bool expectedHasData) : _expectedEndpoint(expectedEndpoint), _expectedHasData(expectedHasData) {}
     bool operator()(const Message& reply) const { return reply.endpoint == expectedEndpoint && reply.data.has_value() == expectedHasData; }
 
     std::string_view expectedEndpoint;
@@ -113,31 +128,19 @@ struct ReplyChecker {
 
 inline std::string sendAndWaitMessageEmplaceBlock(gr::MsgPortOut& toGraph, gr::MsgPortIn& fromGraph, std::string type, property_map properties, std::string serviceName = "", std::source_location sourceLocation = std::source_location::current()) {
     expect(eq(getNReplyMessages(fromGraph), 0UZ)) << std::format("Input port has unconsumed messages. Requested at: {}\n", sourceLocation);
-    testing::sendMessage<gr::message::Command::Set>(toGraph, serviceName, gr::scheduler::property::kEmplaceBlock, //
-        {{"type", std::move(type)}, {"properties", std::move(properties)}});
+    auto reply = testing::sendAndWaitMessage<gr::message::Command::Set>(toGraph, fromGraph, serviceName, gr::scheduler::property::kEmplaceBlock, //
+        {{"type", std::move(type)}, {"properties", std::move(properties)}},                                                                      //
+        ReplyChecker{.expectedEndpoint = gr::scheduler::property::kBlockEmplaced});
 
-    expect(waitForReply(fromGraph)) << std::format("Reply message not received. Requested at: {}\n", sourceLocation);
-
-    const Message reply = consumeReplyMsg(fromGraph);
-    if (!reply.data.has_value()) {
-        expect(false) << std::format("Emplace block failed and returned an error. Requested at: {}. Error: {}\n", sourceLocation, reply.data.error());
-    }
-    return std::get<std::string>(reply.data.value().at("uniqueName"s));
+    return std::get<std::string>(reply.value().data.value().at("uniqueName"s));
 };
 
 inline void sendAndWaitMessageEmplaceEdge(gr::MsgPortOut& toGraph, gr::MsgPortIn& fromGraph, std::string sourceBlock, std::string sourcePort, std::string destinationBlock, std::string destinationPort, std::string serviceName = "", std::source_location sourceLocation = std::source_location::current()) {
     expect(eq(getNReplyMessages(fromGraph), 0UZ)) << std::format("Input port has unconsumed messages. Requested at: {}\n", sourceLocation);
     gr::property_map data = {{"sourceBlock", sourceBlock}, {"sourcePort", sourcePort}, {"destinationBlock", destinationBlock}, {"destinationPort", destinationPort}, //
         {"minBufferSize", gr::Size_t()}, {"weight", 0}, {"edgeName", "unnamed edge"}};
-    testing::sendMessage<gr::message::Command::Set>(toGraph, serviceName, gr::scheduler::property::kEmplaceEdge, data);
-
-    expect(waitForReply(fromGraph)) << std::format("Reply message not received. Requested at: {}\n", sourceLocation);
-    expect(eq(getNReplyMessages(fromGraph), 1UZ)) << std::format("No messages available. Requested at: {}\n", sourceLocation);
-    const Message reply = consumeReplyMsg(fromGraph);
-
-    if (!reply.data.has_value()) {
-        expect(false) << std::format("Emplace edge failed and returned an error. Requested at: {}. Error: {}\n", sourceLocation, reply.data.error());
-    }
+    testing::sendAndWaitMessage<gr::message::Command::Set>(toGraph, fromGraph, serviceName, gr::scheduler::property::kEmplaceEdge, data, //
+        ReplyChecker{.expectedEndpoint = gr::scheduler::property::kEdgeEmplaced});
 };
 
 } // namespace gr::testing

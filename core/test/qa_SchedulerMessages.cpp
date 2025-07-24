@@ -268,7 +268,10 @@ const boost::ut::suite TopologyGraphTests = [] {
         TestScheduler scheduler(std::move(testGraph));
 
         "get scheduler settings"_test = [&] {
-            testing::sendMessage<Get>(scheduler.toScheduler, "", block::property::kSetting, {});
+            // TODO: Would like to port to sendAndWaitMessage, but it's logic is looking at the whole message
+            // queue, and fails if there's scheduler messages. In the future the scheduler might
+            // insert unrelated messages in the queue and this test will fail
+            sendMessage<Get>(scheduler.toScheduler, "", block::property::kSetting, {});
             waitForReply(scheduler.fromScheduler);
 
             bool        atLeastOneReplyFromScheduler = false;
@@ -292,7 +295,8 @@ const boost::ut::suite TopologyGraphTests = [] {
         };
 
         "set scheduler settings"_test = [&] {
-            testing::sendMessage<Set>(scheduler.toScheduler, "", block::property::kStagedSetting, {{"timeout_ms", 42}});
+            // See TODO from "get scheduler settings", same case
+            sendMessage<Set>(scheduler.toScheduler, "", block::property::kStagedSetting, {{"timeout_ms", 42}});
             waitForReply(scheduler.fromScheduler);
 
             bool        atLeastOneReplyFromScheduler = false;
@@ -310,13 +314,15 @@ const boost::ut::suite TopologyGraphTests = [] {
             expect(eq(42UZ, std::get<gr::Size_t>(stagedSettings.at("timeout_ms"))));
 
             // setting staged setting via staged setting (N.B. non-real-time <-> real-time setting decoupling
-            testing::sendMessage<Set>(scheduler.toScheduler, "", block::property::kSetting, {{"timeout_ms", 43}});
-            waitForReply(scheduler.fromScheduler);
+            testing::sendAndWaitMessage<Set>(scheduler.toScheduler, scheduler.fromScheduler, "", block::property::kSetting, {{"timeout_ms", 43}}, //
+                ReplyChecker{.expectedEndpoint = block::property::kSetting, .expectedHasData = false});
 
             stagedSettings = scheduler.scheduler().settings().stagedParameters();
             expect(stagedSettings.contains("timeout_ms"));
             expect(eq(43UZ, std::get<gr::Size_t>(stagedSettings.at("timeout_ms"))));
-            testing::sendMessage<Set>(scheduler.toScheduler, "", block::property::kSetting, {{"timeout_ms", 43}});
+
+            testing::sendAndWaitMessage<Set>(scheduler.toScheduler, scheduler.fromScheduler, "", block::property::kSetting, {{"timeout_ms", 43}}, //
+                ReplyChecker{.expectedEndpoint = block::property::kSetting, .expectedHasData = false});
         };
     };
 
@@ -327,7 +333,7 @@ const boost::ut::suite TopologyGraphTests = [] {
 
         TestScheduler scheduler(std::move(testGraph));
 
-        testing::sendAndWaitMessage<Set>(scheduler.toScheduler, scheduler.fromScheduler, scheduler.unique_name(), //
+        testing::sendAndWaitMessage<Get>(scheduler.toScheduler, scheduler.fromScheduler, scheduler.unique_name(), //
             scheduler::property::kGraphGRC, {}, [](const Message& reply) {
                 if (reply.endpoint == scheduler::property::kGraphGRC && reply.data.has_value()) {
                     const auto& data = reply.data.value();
@@ -362,11 +368,7 @@ const boost::ut::suite MoreTopologyGraphTests = [] {
     expect(eq(ConnectionResult::SUCCESS, graph.connect<"out">(source).to<"in">(sink)));
     expect(eq(graph.edges().size(), 1UZ)) << "edge registered with connect";
 
-    TestScheduler  scheduler(std::move(graph), /*addTestSourceAndSink=*/false);
-    gr::MsgPortOut toScheduler;
-    gr::MsgPortIn  fromScheduler;
-    expect(eq(ConnectionResult::SUCCESS, toScheduler.connect(scheduler.msgIn())));
-    expect(eq(ConnectionResult::SUCCESS, scheduler.msgOut().connect(fromScheduler)));
+    TestScheduler scheduler(std::move(graph), /*addTestSourceAndSink=*/false);
 
     expect(awaitCondition(1s, [&scheduler] { return scheduler.state() == lifecycle::State::RUNNING; })) << "scheduler thread up and running w/ timeout";
     expect(scheduler.state() == lifecycle::State::RUNNING) << "scheduler thread up and running";
@@ -376,43 +378,34 @@ const boost::ut::suite MoreTopologyGraphTests = [] {
     std::println("executed basic graph");
 
     // Adding a few blocks
-    auto multiply1 = sendAndWaitMessageEmplaceBlock(toScheduler, fromScheduler, "gr::testing::Copy<float32>"s, property_map{});
-    auto multiply2 = sendAndWaitMessageEmplaceBlock(toScheduler, fromScheduler, "gr::testing::Copy<float32>"s, property_map{});
-    scheduler.processScheduledMessages();
+    auto multiply1 = sendAndWaitMessageEmplaceBlock(scheduler.toScheduler, scheduler.fromScheduler, "gr::testing::Copy<float32>"s, property_map{});
+    auto multiply2 = sendAndWaitMessageEmplaceBlock(scheduler.toScheduler, scheduler.fromScheduler, "gr::testing::Copy<float32>"s, property_map{});
 
     for (const auto& block : scheduler.graph().blocks()) {
         std::println("block in list: {} - state() : {}", block->name(), magic_enum::enum_name(block->state()));
     }
     expect(eq(scheduler.graph().blocks().size(), 4UZ)) << "should contain sink->multiply1->multiply2->sink";
 
-    sendAndWaitMessageEmplaceEdge(toScheduler, fromScheduler, source.unique_name, "out", multiply1, "in");
-    sendAndWaitMessageEmplaceEdge(toScheduler, fromScheduler, multiply1, "out", multiply2, "in");
-    sendAndWaitMessageEmplaceEdge(toScheduler, fromScheduler, multiply2, "out", sink.unique_name, "in");
-    expect(eq(getNReplyMessages(fromScheduler), 0UZ));
-    scheduler.processScheduledMessages();
+    sendAndWaitMessageEmplaceEdge(scheduler.toScheduler, scheduler.fromScheduler, source.unique_name, "out", multiply1, "in");
+    sendAndWaitMessageEmplaceEdge(scheduler.toScheduler, scheduler.fromScheduler, multiply1, "out", multiply2, "in");
+    sendAndWaitMessageEmplaceEdge(scheduler.toScheduler, scheduler.fromScheduler, multiply2, "out", sink.unique_name, "in");
+    expect(eq(getNReplyMessages(scheduler.fromScheduler), 0UZ));
 
     // Get the whole graph
-    {
-        testing::sendMessage<Set>(toScheduler, "", graph::property::kGraphInspect, property_map{});
-        if (!waitForReply(fromScheduler)) {
-            expect(false) << "Reply message not received for kGraphInspect.";
-        }
+    testing::sendAndWaitMessage<Set>(scheduler.toScheduler, scheduler.fromScheduler, "", graph::property::kGraphInspect, property_map{}, //
+        [](const Message& reply) {
+            if (reply.endpoint != graph::property::kGraphInspected) {
+                return false;
+            }
 
-        expect(eq(getNReplyMessages(fromScheduler), 1UZ));
-        const Message reply = consumeReplyMsg(fromScheduler);
-        expect(eq(getNReplyMessages(fromScheduler), 0UZ));
-        if (!reply.data.has_value()) {
-            expect(false) << std::format("reply.data has no value:{}\n", reply.data.error());
-        }
+            const auto& data     = reply.data.value();
+            const auto& children = std::get<property_map>(data.at("children"s));
+            expect(eq(children.size(), 4UZ));
 
-        const auto& data     = reply.data.value();
-        const auto& children = std::get<property_map>(data.at("children"s));
-        expect(eq(children.size(), 4UZ));
-
-        const auto& edges = std::get<property_map>(data.at("edges"s));
-        expect(eq(edges.size(), 4UZ));
-    }
-    scheduler.processScheduledMessages();
+            const auto& edges = std::get<property_map>(data.at("edges"s));
+            expect(eq(edges.size(), 4UZ));
+            return true;
+        });
 
     scheduler.stop();
 
