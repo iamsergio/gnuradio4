@@ -9,7 +9,7 @@
       "cacheVariables": {
         "CMAKE_COLOR_DIAGNOSTICS": "ON",
         "DISABLE_EXTERNAL_DEPS_WARNINGS": "ON",
-        "WARNINGS_AS_ERRORS": "OFF"
+        "WARNINGS_AS_ERRORS": "ON"
       }
     },
     {
