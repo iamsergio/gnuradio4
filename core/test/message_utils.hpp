@@ -65,10 +65,51 @@ inline bool waitForReply(gr::MsgPortIn& fromGraph, std::size_t nReplies = 1UZ, s
     return fromGraph.streamReader().available() >= nReplies;
 };
 
+template<typename Condition>
+inline bool waitForReply(gr::MsgPortIn& fromGraph, Condition condition, std::chrono::milliseconds maxWaitTime = 1s) {
+    auto startedAt = std::chrono::system_clock::now();
+    while (true) {
+        auto messages = fromGraph.streamReader().get();
+        auto it       = std::find_if(messages.begin(), messages.end(), condition);
+        if (it != messages.end()) {
+            return true;
+        }
+
+        std::this_thread::sleep_for(100ms);
+        if (std::chrono::system_clock::now() - startedAt > maxWaitTime) {
+            std::println("msg dump for failed test:");
+            for (auto& msg : messages) {
+                std::println("msg: .endpoint={} .hasData={}", msg.endpoint, msg.data.has_value());
+            }
+            return false;
+        }
+    }
+};
+
 template<message::Command Cmd>
 inline void sendMessage(auto& toPort, std::string_view serviceName, std::string_view endpoint, property_map data, std::string_view clientRequestID = "") {
     gr::sendMessage<Cmd>(toPort, serviceName, endpoint, std::move(data), clientRequestID);
 }
+
+template<message::Command Cmd, typename Condition>
+inline void sendAndWaitMessage(auto& toPort, auto& fromPort, std::string_view serviceName, std::string_view endpoint, //
+    property_map data, Condition condition, std::string_view clientRequestID = "") {
+    gr::sendMessage<Cmd>(toPort, serviceName, endpoint, std::move(data), clientRequestID);
+    expect(waitForReply(fromPort, condition)) << std::format("Reply message not received.");
+
+    // consume every message so they dont' leak into the next test. The next test is resilient
+    // but it makes debugging harder if we have old messages
+    consumeAllReplyMessages(fromPort);
+    expect(eq(getNReplyMessages(fromPort), 0UZ));
+}
+
+struct ReplyChecker {
+    // ReplyChecker(std::string_view expectedEndpoint, bool expectedHasData) : _expectedEndpoint(expectedEndpoint), _expectedHasData(expectedHasData) {}
+    bool operator()(const Message& reply) const { return reply.endpoint == expectedEndpoint && reply.data.has_value() == expectedHasData; }
+
+    std::string_view expectedEndpoint;
+    bool             expectedHasData = true;
+};
 
 inline std::string sendAndWaitMessageEmplaceBlock(gr::MsgPortOut& toGraph, gr::MsgPortIn& fromGraph, std::string type, property_map properties, std::string serviceName = "", std::source_location sourceLocation = std::source_location::current()) {
     expect(eq(getNReplyMessages(fromGraph), 0UZ)) << std::format("Input port has unconsumed messages. Requested at: {}\n", sourceLocation);
