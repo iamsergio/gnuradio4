@@ -391,6 +391,7 @@ public:
         _progress      = std::move(other._progress);
         _edges         = std::move(other._edges);
         _blocks        = std::move(other._blocks);
+        _pluginLoader  = std::exchange(other._pluginLoader, nullptr);
 
         return *this;
     }
