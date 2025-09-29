@@ -494,21 +494,17 @@ protected:
 
         std::lock_guard lock(_executionOrderMutex);
 
-        // TODO: graph::forEachBlock<TransparentBlockGroup> is processing sub-schedulers, but by luck they don't call
-        // start because still IDLE! I don't understand how forEachBlock is supposed to be used.
         graph::forEachBlock<TransparentBlockGroup>(_graph, [this](auto& block) { //
-            this->emitErrorMessageIfAny("LifecycleState -> RUNNING", block->changeStateTo(lifecycle::RUNNING));
-        });
-
-        graph::forEachBlock<ScheduledBlockGroup>(
-            _graph,
-            [](auto& block) { //
+            if (block->blockCategory() == ScheduledBlockGroup) {
+                // We don't simply move to RUNNING, as schedulers block. This code path
+                // uses a separate thread.
                 auto* schedulerModel = dynamic_cast<SchedulerModel*>(block.get());
                 assert(schedulerModel);
                 schedulerModel->start();
-
-            },
-            block::Category::ScheduledBlockGroup);
+            } else {
+                this->emitErrorMessageIfAny("LifecycleState -> RUNNING", block->changeStateTo(lifecycle::RUNNING));
+            }
+        });
 
         // start watchdog
         auto ioThreadPool = gr::thread_pool::Manager::defaultIoPool();
@@ -670,15 +666,15 @@ protected:
     void stop() {
         using enum lifecycle::State;
         graph::forEachBlock<TransparentBlockGroup>(_graph, [this](auto& block) {
-            this->emitErrorMessageIfAny("forEachBlock -> stop() -> LifecycleState", block->changeStateTo(REQUESTED_STOP));
-            if (!block->isBlocking()) { // N.B. no other thread/constraint to consider before shutting down
-                this->emitErrorMessageIfAny("forEachBlock -> stop() -> LifecycleState", block->changeStateTo(STOPPED));
-            }
-
             if (block->blockCategory() == ScheduledBlockGroup) {
                 auto* schedulerModel = dynamic_cast<SchedulerModel*>(block.get());
                 assert(schedulerModel);
                 schedulerModel->stop();
+            } else {
+                this->emitErrorMessageIfAny("forEachBlock -> stop() -> LifecycleState", block->changeStateTo(REQUESTED_STOP));
+                if (!block->isBlocking()) { // N.B. no other thread/constraint to consider before shutting down
+                    this->emitErrorMessageIfAny("forEachBlock -> stop() -> LifecycleState", block->changeStateTo(STOPPED));
+                }
             }
         });
 
